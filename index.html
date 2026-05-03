@@ -2689,6 +2689,107 @@ function clearForm() {
   addHaulingDtRow();
 }
 
+// ── Auto-clear form saat ganti Shift ────────────────────────
+(function() {
+  var _prevShift = 'A';
+  window.addEventListener('DOMContentLoaded', function() {
+    var shiftSel = document.getElementById('inp-shift');
+    if (!shiftSel) return;
+    _prevShift = shiftSel.value;
+
+    shiftSel.addEventListener('change', function() {
+      var newShift = this.value;
+      var newLabel = newShift === 'A' ? 'Day Shift (A)' : 'Night Shift (B)';
+      var prevLabel = _prevShift === 'A' ? 'Day Shift (A)' : 'Night Shift (B)';
+
+      // Cek apakah ada data yang sudah diisi
+      var hasData = false;
+      var dtRows = document.querySelectorAll('#dt-rows tr');
+      var bsRows = document.querySelectorAll('#bs-rows tr');
+      var bwRows = document.querySelectorAll('#bw-rows tr');
+      var haulingRows = document.querySelectorAll('#hauling-dt-rows tr');
+      var pitVal = (document.getElementById('inp-pit') || {}).value || '';
+      var tonnageVal = (document.getElementById('inp-tonnage') || {}).value || '';
+      if (dtRows.length > 0 || bsRows.length > 0 || bwRows.length > 0 ||
+          haulingRows.length > 0 || pitVal || tonnageVal) {
+        hasData = true;
+      }
+
+      if (!hasData) {
+        // Tidak ada data, langsung ganti tanpa konfirmasi
+        _prevShift = newShift;
+        return;
+      }
+
+      // Ada data — tampilkan modal konfirmasi
+      showShiftConfirm(prevLabel, newLabel, function(confirmed) {
+        if (confirmed) {
+          _prevShift = newShift;
+          clearForm();
+          showToast('✓ Form dikosongkan. Siap input ' + newLabel + '.');
+          // Kembali ke slide pertama di mobile
+          if (typeof goSlide === 'function' && window.innerWidth <= 768) goSlide(0, false);
+        } else {
+          // Batalkan — kembalikan pilihan shift sebelumnya
+          shiftSel.value = _prevShift;
+        }
+      });
+    });
+  });
+})();
+
+// ── Modal konfirmasi ganti shift ─────────────────────────────
+function showShiftConfirm(fromLabel, toLabel, callback) {
+  // Hapus modal lama jika ada
+  var old = document.getElementById('shift-confirm-modal');
+  if (old) old.remove();
+
+  var modal = document.createElement('div');
+  modal.id = 'shift-confirm-modal';
+  modal.style.cssText = [
+    'position:fixed;inset:0;z-index:999999',
+    'display:flex;align-items:center;justify-content:center',
+    'background:rgba(0,0,0,0.65)',
+    'padding:24px',
+    'animation:loginFadeIn 0.2s ease'
+  ].join(';');
+
+  modal.innerHTML = [
+    '<div style="background:var(--panel);border:1px solid var(--border);border-radius:14px;',
+    'padding:28px 24px;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.6)">',
+    '<div style="font-size:26px;text-align:center;margin-bottom:12px">🔄</div>',
+    '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:800;',
+    'text-transform:uppercase;letter-spacing:0.5px;text-align:center;margin-bottom:8px">',
+    'Ganti Shift?</div>',
+    '<div style="font-size:13px;color:var(--text-dim);text-align:center;line-height:1.6;margin-bottom:20px">',
+    'Pindah dari <strong style="color:var(--accent)">' + fromLabel + '</strong> ke ',
+    '<strong style="color:var(--blue)">' + toLabel + '</strong>.<br>',
+    '<span style="color:var(--danger);font-weight:600">Semua data Shift ' + fromLabel.split(' ')[0] + ' yang belum disimpan akan terhapus.</span>',
+    '</div>',
+    '<div style="display:flex;gap:10px">',
+    '<button id="shift-confirm-cancel" style="flex:1;padding:12px;border-radius:8px;border:1px solid var(--border);',
+    'background:var(--coal-light);color:var(--text);font-family:\'Barlow Condensed\',sans-serif;',
+    'font-size:14px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer">',
+    '✕ Batal</button>',
+    '<button id="shift-confirm-ok" style="flex:1;padding:12px;border-radius:8px;border:none;',
+    'background:var(--danger);color:#fff;font-family:\'Barlow Condensed\',sans-serif;',
+    'font-size:14px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;cursor:pointer">',
+    '🗑 Ya, Kosongkan</button>',
+    '</div></div>'
+  ].join('');
+
+  document.body.appendChild(modal);
+
+  function close(result) {
+    modal.remove();
+    callback(result);
+  }
+
+  document.getElementById('shift-confirm-ok').addEventListener('click', function() { close(true); });
+  document.getElementById('shift-confirm-cancel').addEventListener('click', function() { close(false); });
+  modal.addEventListener('click', function(e) { if (e.target === modal) close(false); });
+}
+
 function loadShiftToForm() {
   const date  = document.getElementById('inp-date').value;
   const shift = document.getElementById('inp-shift').value;
@@ -4794,7 +4895,48 @@ document.getElementById('excel-modal').addEventListener('click', function(e) {
   border-color: var(--ok);
 }
 
-/* ═══ MOBILE OVERFLOW FIX — Cegah geser kiri-kanan ═══ */
+/* ═══ STICKY DELETE BUTTON — Kolom X selalu terlihat di HP ═══ */
+@media (max-width: 768px) {
+  /* Kolom terakhir (del-btn) di tabel input: sticky kanan */
+  .dt-table td:last-child,
+  .dt-table th:last-child {
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: var(--panel);
+    box-shadow: -3px 0 8px rgba(0,0,0,0.35);
+    padding: 6px 8px;
+    min-width: 38px;
+    text-align: center;
+  }
+  .dt-table th:last-child {
+    background: var(--coal);
+  }
+  /* Hover row: pastikan sticky cell ikut highlight */
+  .dt-table tr:hover td:last-child {
+    background: var(--coal-light);
+  }
+
+  /* Tombol X lebih besar & jelas di HP */
+  .del-btn {
+    width: 30px !important;
+    height: 30px !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+    border-color: rgba(232,64,64,0.4) !important;
+    color: var(--danger) !important;
+    background: rgba(232,64,64,0.08) !important;
+    padding: 0 !important;
+  }
+  .del-btn:active {
+    background: rgba(232,64,64,0.25) !important;
+    transform: scale(0.92);
+  }
+}
+
 @media (max-width: 768px) {
   html, body {
     overflow-x: hidden !important;
