@@ -4313,7 +4313,7 @@ function saveHTMLWithData() {
 // ========================
 // GOOGLE SHEETS INTEGRATION
 // ========================
-const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbyboy5gfbHGCx77UajLNkFLr4bAZKBTsQIQ4x9ghx-crm-sfgiw1SEqD5stz14OFQ0/exec';
+const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbyPm-ibLEsrmbXDFSbsk-HMSp3W5CQpJ4vK4cN5mYreH-sfjV6sImrdaiKu2Zudm9Q/exec';
 
 function getGSUrl() {
   // URL sudah tertanam permanen — tidak perlu input manual
@@ -4396,7 +4396,6 @@ async function postToSheets(payload) {
   if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi!', true); return false; }
   return new Promise(function(resolve) {
     try {
-      // Metode iframe + form — 100% bypass CORS, terbukti bekerja dengan Apps Script
       const iframeId = 'gs_iframe_' + Date.now();
       const formId   = 'gs_form_'   + Date.now();
 
@@ -4413,21 +4412,63 @@ async function postToSheets(payload) {
       form.style.display = 'none';
       form.id = formId;
 
-      const input = document.createElement('input');
-      input.type  = 'hidden';
-      input.name  = 'payload';
-      input.value = JSON.stringify(payload);
-      form.appendChild(input);
+      function addField(name, value) {
+        const inp = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = name;
+        inp.value = (value === null || value === undefined) ? '' : String(value);
+        form.appendChild(inp);
+      }
+
+      // Selalu kirim action
+      addField('action', payload.action || '');
+
+      if (payload.action === 'saveShift' && payload.data) {
+        // Kirim field-by-field agar tidak overflow (hindari JSON blob besar)
+        const d = payload.data;
+        addField('date',         d.date        || '');
+        addField('shift',        d.shift       || '');
+        addField('pit',          d.pit         || '');
+        addField('seam',         d.seam        || '');
+        addField('tonnage',      d.tonnage     || 0);
+        addField('hauling',      d.hauling     || 0);
+        addField('ops',          d.ops         || 0);
+        addField('stb',          d.stb         || 0);
+        addField('bd',           d.bd          || 0);
+        addField('ewh',          d.ewh         || 0);
+        addField('tph',          d.tph         || 0);
+        addField('supvFP',       d.supvFP      || '');
+        addField('supvCR',       d.supvCR      || '');
+        addField('source',       d.source      || '');
+        addField('remarkMaint',  d.remarkMaint || '');
+        addField('remarkGen',    d.remarkGen   || '');
+        addField('savedAt',      d.savedAt     || new Date().toISOString());
+        // Rows tetap JSON tapi di-trim jika terlalu panjang
+        addField('bwRows',       JSON.stringify(d.bwRows        || []));
+        addField('bsRows',       JSON.stringify(d.bsRows        || []));
+        addField('dtRows',       JSON.stringify(d.dtRows        || []));
+        addField('haulingDtRows',JSON.stringify(d.haulingDtRows || []));
+
+      } else if (payload.action === 'saveDaily') {
+        addField('date', payload.date || '');
+
+      } else if (payload.action === 'saveMTD') {
+        addField('month', payload.month || '');
+        addField('rows',  JSON.stringify(payload.rows || []));
+
+      } else {
+        // Fallback: kirim seluruh payload sebagai JSON
+        addField('payload', JSON.stringify(payload));
+      }
 
       document.body.appendChild(form);
       form.submit();
 
-      // Bersihkan setelah 4 detik
       setTimeout(function() {
-        if (document.getElementById(iframeId)) document.body.removeChild(iframe);
-        if (document.getElementById(formId))   document.body.removeChild(form);
+        try { if (document.getElementById(iframeId)) document.body.removeChild(iframe); } catch(e){}
+        try { if (document.getElementById(formId))   document.body.removeChild(form);   } catch(e){}
         resolve(true);
-      }, 4000);
+      }, 5000);
     } catch(err) {
       showToast('✗ Gagal kirim ke Sheets: ' + err.message, true);
       resolve(false);
