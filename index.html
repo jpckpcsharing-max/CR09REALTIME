@@ -4313,7 +4313,7 @@ function saveHTMLWithData() {
 // ========================
 // GOOGLE SHEETS INTEGRATION
 // ========================
-const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbxvG10UonlHBGMoRRbToart3q6h0ifqU_N4xDGM1nvV3DVjx-K9OwfKNkbrvHGXnQ/exec';
+const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbyboy5gfbHGCx77UajLNkFLr4bAZKBTsQIQ4x9ghx-crm-sfgiw1SEqD5stz14OFQ0/exec';
 
 function getGSUrl() {
   // URL sudah tertanam permanen — tidak perlu input manual
@@ -4394,17 +4394,45 @@ function initGSStatus() {
 async function postToSheets(payload) {
   const url = getGSUrl();
   if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi!', true); return false; }
-  try {
-    // Gunakan FormData agar body sampai ke Apps Script via e.parameter.payload
-    const formData = new FormData();
-    formData.append('payload', JSON.stringify(payload));
-    await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
-    // no-cors tidak bisa baca response, asumsikan sukses jika tidak throw
-    return true;
-  } catch(err) {
-    showToast('✗ Gagal kirim ke Sheets: ' + err.message, true);
-    return false;
-  }
+  return new Promise(function(resolve) {
+    try {
+      // Metode iframe + form — 100% bypass CORS, terbukti bekerja dengan Apps Script
+      const iframeId = 'gs_iframe_' + Date.now();
+      const formId   = 'gs_form_'   + Date.now();
+
+      const iframe = document.createElement('iframe');
+      iframe.name = iframeId;
+      iframe.id   = iframeId;
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+
+      const form = document.createElement('form');
+      form.method  = 'POST';
+      form.action  = url;
+      form.target  = iframeId;
+      form.style.display = 'none';
+      form.id = formId;
+
+      const input = document.createElement('input');
+      input.type  = 'hidden';
+      input.name  = 'payload';
+      input.value = JSON.stringify(payload);
+      form.appendChild(input);
+
+      document.body.appendChild(form);
+      form.submit();
+
+      // Bersihkan setelah 4 detik
+      setTimeout(function() {
+        if (document.getElementById(iframeId)) document.body.removeChild(iframe);
+        if (document.getElementById(formId))   document.body.removeChild(form);
+        resolve(true);
+      }, 4000);
+    } catch(err) {
+      showToast('✗ Gagal kirim ke Sheets: ' + err.message, true);
+      resolve(false);
+    }
+  });
 }
 
 async function saveShiftToSheets() {
