@@ -2719,15 +2719,19 @@ async function saveShift() {
   if (!db[date]) db[date] = {};
   db[date][shift] = data;
   setDB(db);
-  showToast('✓ Shift ' + (shift === 'A' ? 'Day' : 'Night') + ' tanggal ' + date + ' tersimpan lokal. Mengirim ke Sheets...');
+  showToast('⏳ Menyimpan Shift ' + (shift === 'A' ? 'Day' : 'Night') + ' ' + date + ' ...');
 
   // Kirim ke Google Sheets
   const gsUrl = getGSUrl();
   if (gsUrl) {
     const ok = await postToSheets({ action: 'saveShift', data });
-    if (ok) showToast('✓ Data Shift ' + (shift === 'A' ? 'Day' : 'Night') + ' ' + date + ' berhasil disimpan ke Google Sheets!');
+    if (ok) {
+      showToast('✅ Shift ' + (shift === 'A' ? 'Day' : 'Night') + ' ' + date + ' tersimpan lokal & terkirim ke Google Sheets!');
+    } else {
+      showToast('⚠ Shift disimpan lokal, tapi gagal kirim ke Google Sheets.', true);
+    }
   } else {
-    showToast('⚠ Data tersimpan lokal. Google Sheets URL belum dikonfigurasi.', true);
+    showToast('✓ Shift ' + (shift === 'A' ? 'Day' : 'Night') + ' ' + date + ' tersimpan lokal.', false);
   }
 }
 
@@ -4309,7 +4313,7 @@ function saveHTMLWithData() {
 // ========================
 // GOOGLE SHEETS INTEGRATION
 // ========================
-const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbzl02HrfWpLkOKdBJRL5YeTQZmJP6m_yRcU0PV01lvIYVSo2eXUIY_91Won2Wkv3us/exec';
+const GS_URL_FIXED = 'https://script.google.com/macros/s/AKfycbxvG10UonlHBGMoRRbToart3q6h0ifqU_N4xDGM1nvV3DVjx-K9OwfKNkbrvHGXnQ/exec';
 
 function getGSUrl() {
   // URL sudah tertanam permanen — tidak perlu input manual
@@ -4389,17 +4393,16 @@ function initGSStatus() {
 
 async function postToSheets(payload) {
   const url = getGSUrl();
-  if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi! Klik ⚙ Google Sheets.', true); return false; }
+  if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi!', true); return false; }
   try {
-    showToast('⏳ Mengirim ke Google Sheets...');
     // Gunakan FormData agar body sampai ke Apps Script via e.parameter.payload
     const formData = new FormData();
     formData.append('payload', JSON.stringify(payload));
     await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
-    showToast('✓ Data berhasil dikirim ke Google Sheets!');
+    // no-cors tidak bisa baca response, asumsikan sukses jika tidak throw
     return true;
   } catch(err) {
-    showToast('✗ Gagal kirim: ' + err.message, true);
+    showToast('✗ Gagal kirim ke Sheets: ' + err.message, true);
     return false;
   }
 }
@@ -4411,12 +4414,28 @@ async function saveShiftToSheets() {
 
 async function sendDailyToSheets() {
   const date = document.getElementById('daily-date').value;
-  if (!date) { showToast('Pilih tanggal dulu!', true); return; }
+  if (!date) { showToast('⚠ Pilih tanggal dulu!', true); return; }
   const db = getDB();
-  if (!db[date]) { showToast('Tidak ada data untuk tanggal ini!', true); return; }
-  if (db[date].A) await postToSheets({ action: 'saveShift', data: db[date].A });
-  if (db[date].B) await postToSheets({ action: 'saveShift', data: db[date].B });
+  if (!db[date] || (!db[date].A && !db[date].B)) {
+    showToast('⚠ Tidak ada data shift untuk tanggal ' + date + '. Input dulu via menu Input Laporan!', true);
+    return;
+  }
+  showToast('⏳ Mengirim data ' + date + ' ke Google Sheets...');
+  let sukses = 0;
+  if (db[date].A) {
+    const ok = await postToSheets({ action: 'saveShift', data: db[date].A });
+    if (ok) sukses++;
+  }
+  if (db[date].B) {
+    const ok = await postToSheets({ action: 'saveShift', data: db[date].B });
+    if (ok) sukses++;
+  }
   await postToSheets({ action: 'saveDaily', date });
+  if (sukses > 0) {
+    showToast('✅ ' + sukses + ' shift berhasil dikirim ke Google Sheets! Cek sheet kamu.');
+  } else {
+    showToast('⚠ Pengiriman selesai namun tidak ada shift terkirim.', true);
+  }
 }
 
 async function sendMTDToSheets() {
