@@ -4395,21 +4395,64 @@ async function postToSheets(payload) {
   const url = getGSUrl();
   if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi!', true); return false; }
   try {
-    // Kirim via JSONP GET — satu-satunya cara yang bekerja lintas perangkat tanpa CORS
     const action = payload.action || 'saveShift';
     let gsUrl;
+
     if (action === 'saveShift') {
-      gsUrl = url + '?action=saveShift&data=' + encodeURIComponent(JSON.stringify(payload.data || {}));
+      const d = payload.data || {};
+      // Kirim semua data lengkap sekaligus
+      const clean = {
+        date: d.date, shift: d.shift,
+        pit: d.pit||'', seam: d.seam||'',
+        tonnage: d.tonnage||0, hauling: d.hauling||0, tph: d.tph||0,
+        ewh: d.ewh||12, stb: d.stb||0, bd: d.bd||0, ops: d.ops||0,
+        supvFP: d.supvFP||'', supvCR: d.supvCR||'',
+        remarkMaint: d.remarkMaint||'', remarkGen: d.remarkGen||'',
+        bwRows: (d.bwRows||[]).filter(r => r.tonnage>0||r.source),
+        bsRows: (d.bsRows||[]).filter(r => r.hauling>0||r.source),
+        dtRows: (d.dtRows||[]).filter(r => r.stop||r.desc),
+        haulingDtRows: (d.haulingDtRows||[]).filter(r => r.stop||r.desc)
+      };
+      const encoded = encodeURIComponent(JSON.stringify(clean));
+      gsUrl = url + '?action=saveShift&data=' + encoded;
+
+      // Kalau URL terlalu panjang (>7500 char), pisah dtRows & haulingDtRows
+      if (gsUrl.length > 7500) {
+        const dtFull      = clean.dtRows;
+        const haulingFull = clean.haulingDtRows;
+        clean.dtRows = [];
+        clean.haulingDtRows = [];
+        // Kirim data utama
+        const r1 = await fetchJSONP(url + '?action=saveShift&data=' + encodeURIComponent(JSON.stringify(clean)));
+        if (r1 && r1.ok === false) { showToast('⚠ ' + (r1.error||'Sheets error'), true); return false; }
+        // Kirim dtRows terpisah
+        if (dtFull.length > 0) {
+          await fetchJSONP(url + '?action=saveShift&data=' + encodeURIComponent(JSON.stringify({
+            date: clean.date, shift: clean.shift,
+            dtRows: dtFull, bwRows:[], bsRows:[], haulingDtRows:[]
+          })));
+        }
+        // Kirim haulingDtRows terpisah
+        if (haulingFull.length > 0) {
+          await fetchJSONP(url + '?action=saveShift&data=' + encodeURIComponent(JSON.stringify({
+            date: clean.date, shift: clean.shift,
+            haulingDtRows: haulingFull, bwRows:[], bsRows:[], dtRows:[]
+          })));
+        }
+        return true;
+      }
+
     } else if (action === 'saveDaily') {
-      gsUrl = url + '?action=saveDaily&date=' + encodeURIComponent(payload.date || '');
+      gsUrl = url + '?action=saveDaily&date=' + encodeURIComponent(payload.date||'');
     } else if (action === 'saveMTD') {
-      gsUrl = url + '?action=saveMTD&month=' + encodeURIComponent(payload.month || '') + '&rows=' + encodeURIComponent(JSON.stringify(payload.rows || []));
+      gsUrl = url + '?action=saveMTD&month=' + encodeURIComponent(payload.month||'') + '&rows=' + encodeURIComponent(JSON.stringify(payload.rows||[]));
     } else {
       gsUrl = url + '?action=' + action + '&data=' + encodeURIComponent(JSON.stringify(payload));
     }
+
     const result = await fetchJSONP(gsUrl);
     if (result && result.ok === false) {
-      showToast('⚠ Sheets error: ' + (result.error || 'unknown'), true);
+      showToast('⚠ Sheets error: ' + (result.error||'unknown'), true);
       return false;
     }
     return true;
