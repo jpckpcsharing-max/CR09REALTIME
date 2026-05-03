@@ -4571,11 +4571,20 @@ async function onInputDateChange() {
 // TOAST
 // ========================
 function showToast(msg, isError=false) {
-  const t = document.getElementById('toast');
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;z-index:99999;max-width:90vw;text-align:center;border:1px solid rgba(255,255,255,0.1)';
+    document.body.appendChild(t);
+  }
   t.textContent = msg;
-  t.className = 'toast' + (isError ? ' error' : '');
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  t.style.background = isError ? '#7b1c1c' : '#1e2a3a';
+  t.style.color = isError ? '#ffaaaa' : '#fff';
+  t.style.opacity = '1';
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
 }
 </script>
 <script id="cr9-data-store" type="application/json">{}</script>
@@ -5590,4 +5599,5 @@ window.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1e2a3a;color:#fff;padding:12px 24px;border-radius:8px;font-size:13px;font-weight:600;z-index:99999;opacity:0;transition:opacity 0.3s;pointer-events:none;max-width:90vw;text-align:center;border:1px solid rgba(255,255,255,0.1)"></div>
 </body></html>
