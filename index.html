@@ -4463,8 +4463,48 @@ async function postToSheets(payload) {
 }
 
 async function saveShiftToSheets() {
-  // Wrapper kompatibel - saveShift sudah otomatis kirim ke GS
   await saveShift();
+}
+
+// ── Push SEMUA data dari cache lokal ke Google Sheets ─────────────────────
+async function pushAllToSheets() {
+  const db = getDB();
+  const dates = Object.keys(db).sort();
+  if (dates.length === 0) { showToast('Tidak ada data lokal!', true); return; }
+  const url = getGSUrl();
+  if (!url) { showToast('⚠ URL Google Sheets belum dikonfigurasi!', true); return; }
+
+  showToast('⏳ Mengirim ' + dates.length + ' hari data ke Sheets...');
+  let ok = 0, fail = 0;
+
+  for (const date of dates) {
+    const dayData = db[date];
+    for (const shift of ['A','B']) {
+      const d = dayData[shift];
+      if (!d) continue;
+      try {
+        const clean = {
+          date: d.date, shift: d.shift,
+          pit: d.pit||'', seam: d.seam||'',
+          tonnage: d.tonnage||0, hauling: d.hauling||0, tph: d.tph||0,
+          ewh: d.ewh||12, stb: d.stb||0, bd: d.bd||0, ops: d.ops||0,
+          supvFP: d.supvFP||'', supvCR: d.supvCR||'',
+          remarkMaint: d.remarkMaint||'', remarkGen: d.remarkGen||'',
+          bwRows: (d.bwRows||[]).filter(r => r.tonnage>0||r.source),
+          bsRows: (d.bsRows||[]).filter(r => r.hauling>0||r.source),
+          dtRows: (d.dtRows||[]).filter(r => r.stop||r.desc),
+          haulingDtRows: (d.haulingDtRows||[]).filter(r => r.stop||r.desc)
+        };
+        const gsUrl = url + '?action=saveShift&data=' + encodeURIComponent(JSON.stringify(clean));
+        const result = await fetchJSONP(gsUrl);
+        if (result && result.ok !== false) ok++;
+        else fail++;
+      } catch(e) { fail++; }
+    }
+  }
+  showToast(fail === 0
+    ? '✅ Semua data berhasil dikirim ke Sheets! (' + ok + ' shift)'
+    : '⚠ Terkirim: ' + ok + ', Gagal: ' + fail, fail > 0);
 }
 
 async function sendDailyToSheets() {
