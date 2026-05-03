@@ -4392,7 +4392,10 @@ async function postToSheets(payload) {
   if (!url) { showToast('⚠ Google Sheets URL belum dikonfigurasi! Klik ⚙ Google Sheets.', true); return false; }
   try {
     showToast('⏳ Mengirim ke Google Sheets...');
-    await fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+    // Gunakan FormData agar body sampai ke Apps Script via e.parameter.payload
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(payload));
+    await fetch(url, { method: 'POST', mode: 'no-cors', body: formData });
     showToast('✓ Data berhasil dikirim ke Google Sheets!');
     return true;
   } catch(err) {
